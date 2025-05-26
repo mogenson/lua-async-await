@@ -2,7 +2,7 @@ local co = coroutine
 
 function async(f)
     return function(...)
-        local params = {...}
+        local params = { ... }
         local thread = co.create(function()
             return f(table.unpack(params))
         end)
@@ -10,28 +10,28 @@ function async(f)
         return function(cb)
             local step = nil
             step = function(...)
-                local result = {co.resume(thread, ...)}
+                local result = { co.resume(thread, ...) }
                 table.remove(result, 1)
 
                 if co.status(thread) == "dead" then
-                    cb(table.unpack(result))
+                    return (cb or function() end)(table.unpack(result))
                 else
                     local f = table.unpack(result)
                     assert(type(f) == "function", "type error :: expected func")
-                    f(step)
+                    return f(step)
                 end
             end
-            step()
+            return step()
         end
     end
 end
 
 function wrap(f)
     return function(...)
-        local params = {...}
+        local params = { ... }
         return function(cb)
             table.insert(params, cb)
-            f(table.unpack(params))
+            return f(table.unpack(params))
         end
     end
 end
@@ -41,7 +41,7 @@ function await(thunk)
 end
 
 function await_all(...)
-    return co.yield(join({...}))
+    return co.yield(join({ ... }))
 end
 
 function join(thunks)
@@ -52,13 +52,12 @@ function join(thunks)
 
     return function(cb)
         if total == 0 then
-            cb()
-            return
+            return (cb or function() end)()
         end
 
         for i, thunk in ipairs(thunks) do
             thunk(function(...)
-                local args = {...}
+                local args = { ... }
                 if #args <= 1 then
                     result[i] = args[1]
                 else
@@ -67,7 +66,7 @@ function join(thunks)
 
                 finished = finished + 1
                 if finished == total then
-                    cb(table.unpack(result))
+                    return (cb or function() end)(table.unpack(result))
                 end
             end)
         end
@@ -75,15 +74,14 @@ function join(thunks)
 end
 
 function await_race(...)
-    return co.yield(race({...}))
+    return co.yield(race({ ... }))
 end
 
 function race(thunks)
     local finished = false
     return function(cb)
         if #thunks == 0 then
-            cb()
-            return
+            return (cb or function() end)()
         end
 
         for i, thunk in ipairs(thunks) do
@@ -94,14 +92,14 @@ function race(thunks)
                 finished = true
 
                 local result = {}
-                local args = {...}
+                local args = { ... }
                 if #args <= 1 then
                     result[i] = args[1]
                 else
                     result[i] = args
                 end
 
-                cb(result)
+                return (cb or function() end)(result)
             end)
         end
     end
