@@ -2,6 +2,74 @@ local a = require("src.lib")
 local uv = require("luv")
 
 describe("a", function()
+    it("queue", function()
+        local q = a.queue()
+
+        local putter = a.sync(function(queue)
+            for i = 1, 10 do
+                print("queue put ", i)
+                queue:put(i)
+            end
+            queue:put(false)
+            return true
+        end)
+
+        local getter = a.sync(function(queue)
+            local vals, val = {}, nil
+            repeat
+                val = a.wait(queue:get())
+                print("queue get ", val)
+                table.insert(vals, val or nil)
+            until not val
+            return vals
+        end)
+
+        local main = a.sync(function()
+            return a.wait_all(getter(q), putter(q))
+        end)
+
+        local results = nil
+        main()(function(...)
+            results = { ... }
+        end)
+        assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, results[1])
+        assert.is_true(results[2])
+    end)
+
+    it("channel", function()
+        local tx, rx = a.channel()
+
+        local sender = a.sync(function(tx)
+            for i = 1, 10 do
+                print("channel send ", i)
+                a.wait(tx:send(i))
+            end
+            a.wait(tx:send(false))
+            return true
+        end)
+
+        local receiver = a.sync(function(rx)
+            local vals, val = {}, nil
+            repeat
+                val = a.wait(rx:recv())
+                print("channel recv ", val)
+                table.insert(vals, val or nil)
+            until not val
+            return vals
+        end)
+
+        local main = a.sync(function()
+            return a.wait_all(sender(tx), receiver(rx))
+        end)
+
+        local results = nil
+        main()(function(...)
+            results = { ... }
+        end)
+        assert.is_true(results[1])
+        assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, results[2])
+    end)
+
     it("example from the readme", function()
         local greet = a.sync(function()
             return "Hello"

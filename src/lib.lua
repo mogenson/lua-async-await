@@ -1,6 +1,6 @@
 local co = coroutine
 
-function async(f)
+local function async(f)
     return function(...)
         local params = { ... }
         local thread = co.create(function()
@@ -26,7 +26,7 @@ function async(f)
     end
 end
 
-function wrap(f)
+local function wrap(f)
     return function(...)
         local params = { ... }
         return function(cb)
@@ -36,15 +36,7 @@ function wrap(f)
     end
 end
 
-function await(thunk)
-    return co.yield(thunk)
-end
-
-function await_all(...)
-    return co.yield(join({ ... }))
-end
-
-function join(thunks)
+local function join(thunks)
     local total = #thunks
 
     local finished = 0
@@ -71,10 +63,6 @@ function join(thunks)
             end)
         end
     end
-end
-
-function await_race(...)
-    return co.yield(race({ ... }))
 end
 
 function race(thunks)
@@ -105,6 +93,66 @@ function race(thunks)
     end
 end
 
+local function await(thunk)
+    return co.yield(thunk)
+end
+
+local function await_all(...)
+    return co.yield(join({ ... }))
+end
+
+local function await_race(...)
+    return co.yield(race({ ... }))
+end
+
+local function queue()
+    return {
+        cb = nil,
+        q = {},
+        get = wrap(function(self, cb)
+            local value = table.remove(self.q)
+            if value then
+                return cb(value)
+            else
+                self.cb = cb
+            end
+        end),
+        put = function(self, value)
+            local cb = self.cb
+            if cb then
+                self.cb = nil
+                return cb(value)
+            else
+                table.insert(self.q, value)
+            end
+        end,
+    }
+end
+
+local function channel()
+    local tx = {
+        send = wrap(function(self, value, send_cb)
+            self.rx.recv = wrap(function(self, recv_cb)
+                self.recv = self.default
+                send_cb()
+                return recv_cb(value)
+            end)
+        end)
+    }
+    local rx = {
+        recv = wrap(function(self, recv_cb)
+            self.tx.send = wrap(function(self, value, send_cb)
+                self.send = self.default
+                recv_cb()
+                return send_cb()
+            end)
+        end)
+    }
+    tx.default, rx.default = tx.send, rx.recv
+    tx.rx, rx.tx = rx, tx
+    return tx, rx
+end
+
 return {
     sync = async,
     wait = await,
@@ -112,4 +160,7 @@ return {
 
     wait_all = await_all,
     wait_race = await_race,
+
+    queue = queue,
+    channel = channel,
 }
