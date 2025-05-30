@@ -41,7 +41,7 @@ describe("a", function()
 
         local sender = a.sync(function(tx)
             for i = 1, 10 do
-                print("channel send ", i)
+                print("channelA send ", i)
                 a.wait(tx:send(i))
             end
             a.wait(tx:send(false))
@@ -52,7 +52,7 @@ describe("a", function()
             local vals, val = {}, nil
             repeat
                 val = a.wait(rx:recv())
-                print("channel recv ", val)
+                print("channelA recv ", val)
                 table.insert(vals, val or nil)
             until not val
             return vals
@@ -62,12 +62,46 @@ describe("a", function()
             return a.wait_all(sender(tx), receiver(rx))
         end)
 
-        local results = nil
+        local resultsA = nil
         main()(function(...)
-            results = { ... }
+            resultsA = { ... }
         end)
-        assert.is_true(results[1])
-        assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, results[2])
+        assert.is_true(resultsA[1])
+        assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, resultsA[2])
+    end)
+
+    it("channel-reverse", function()
+        local tx, rx = a.channel()
+
+        local sender = a.sync(function(tx)
+            for i = 1, 10 do
+                print("channelB send ", i)
+                a.wait(tx:send(i))
+            end
+            a.wait(tx:send(false))
+            return true
+        end)
+
+        local receiver = a.sync(function(rx)
+            local vals, val = {}, nil
+            repeat
+                val = a.wait(rx:recv())
+                print("channelB recv ", val)
+                table.insert(vals, val or nil)
+            until not val
+            return vals
+        end)
+
+        local main = a.sync(function()
+            return a.wait_all(receiver(rx), sender(tx))
+        end)
+
+        local resultsB = nil
+        main()(function(...)
+            resultsB = { ... }
+        end)
+        assert.are.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, resultsB[1])
+        assert.is_true(resultsB[2])
     end)
 
     it("example from the readme", function()

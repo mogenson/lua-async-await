@@ -143,7 +143,7 @@ local function channel()
         recv = wrap(function(self, recv_cb)
             self.tx.send = wrap(function(self, value, send_cb)
                 self.send = self.default
-                recv_cb()
+                recv_cb(value)
                 return send_cb()
             end)
         end)
