@@ -108,7 +108,7 @@ end
 local function block(thunk)
   local results = nil
   thunk(function(...) results = table.pack(...) end)
-  return table.unpack(results)
+  return table.unpack(results or {})
 end
 
 local function queue()
