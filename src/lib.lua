@@ -1,173 +1,173 @@
 local co = coroutine
 
 local function async(f)
-  return function(...)
-    local params = { ... }
-    local thread = co.create(function()
-      return f(table.unpack(params))
-    end)
+    return function(...)
+        local params = { ... }
+        local thread = co.create(function()
+            return f(table.unpack(params))
+        end)
 
-    return function(cb)
-      local step = nil
-      step = function(...)
-        local result = { co.resume(thread, ...) }
-        table.remove(result, 1)
+        return function(cb)
+            local step = nil
+            step = function(...)
+                local result = { co.resume(thread, ...) }
+                table.remove(result, 1)
 
-        if co.status(thread) == "dead" then
-          return (cb or function() end)(table.unpack(result))
-        else
-          local f = table.unpack(result)
-          assert(type(f) == "function", "type error :: expected func")
-          return f(step)
+                if co.status(thread) == "dead" then
+                    return (cb or function() end)(table.unpack(result))
+                else
+                    local f = table.unpack(result)
+                    assert(type(f) == "function", "type error :: expected func")
+                    return f(step)
+                end
+            end
+            return step()
         end
-      end
-      return step()
     end
-  end
 end
 
 local function wrap(f)
-  return function(...)
-    local params = { ... }
-    return function(cb)
-      table.insert(params, cb)
-      return f(table.unpack(params))
+    return function(...)
+        local params = { ... }
+        return function(cb)
+            table.insert(params, cb)
+            return f(table.unpack(params))
+        end
     end
-  end
 end
 
 local function join(thunks)
-  local total = #thunks
+    local total = #thunks
 
-  local finished = 0
-  local result = {}
+    local finished = 0
+    local result = {}
 
-  return function(cb)
-    if total == 0 then
-      return (cb or function() end)()
-    end
-
-    for i, thunk in ipairs(thunks) do
-      thunk(function(...)
-        local args = { ... }
-        if #args <= 1 then
-          result[i] = args[1]
-        else
-          result[i] = args
+    return function(cb)
+        if total == 0 then
+            return (cb or function() end)()
         end
 
-        finished = finished + 1
-        if finished == total then
-          return (cb or function() end)(table.unpack(result))
+        for i, thunk in ipairs(thunks) do
+            thunk(function(...)
+                local args = { ... }
+                if #args <= 1 then
+                    result[i] = args[1]
+                else
+                    result[i] = args
+                end
+
+                finished = finished + 1
+                if finished == total then
+                    return (cb or function() end)(table.unpack(result))
+                end
+            end)
         end
-      end)
     end
-  end
 end
 
 function race(thunks)
-  local finished = false
-  return function(cb)
-    if #thunks == 0 then
-      return (cb or function() end)()
-    end
-
-    for i, thunk in ipairs(thunks) do
-      thunk(function(...)
-        if finished then
-          return
-        end
-        finished = true
-
-        local result = {}
-        local args = { ... }
-        if #args <= 1 then
-          result[i] = args[1]
-        else
-          result[i] = args
+    local finished = false
+    return function(cb)
+        if #thunks == 0 then
+            return (cb or function() end)()
         end
 
-        return (cb or function() end)(result)
-      end)
+        for i, thunk in ipairs(thunks) do
+            thunk(function(...)
+                if finished then
+                    return
+                end
+                finished = true
+
+                local result = {}
+                local args = { ... }
+                if #args <= 1 then
+                    result[i] = args[1]
+                else
+                    result[i] = args
+                end
+
+                return (cb or function() end)(result)
+            end)
+        end
     end
-  end
 end
 
 local function await(thunk)
-  return co.yield(thunk)
+    return co.yield(thunk)
 end
 
 local function await_all(...)
-  return co.yield(join({ ... }))
+    return co.yield(join({ ... }))
 end
 
 local function await_race(...)
-  return co.yield(race({ ... }))
+    return co.yield(race({ ... }))
 end
 
 local function block(thunk)
-  local results = nil
-  thunk(function(...) results = table.pack(...) end)
-  return table.unpack(results or {})
+    local results = nil
+    thunk(function(...) results = table.pack(...) end)
+    return table.unpack(results or {})
 end
 
 local function queue()
-  return {
-    cb = nil,
-    q = {},
-    get = wrap(function(self, cb)
-      local value = table.remove(self.q)
-      if value then
-        return cb(value)
-      else
-        self.cb = cb
-      end
-    end),
-    put = function(self, value)
-      local cb = self.cb
-      if cb then
-        self.cb = nil
-        return cb(value)
-      else
-        table.insert(self.q, value)
-      end
-    end,
-  }
+    return {
+        cb = nil,
+        q = {},
+        get = wrap(function(self, cb)
+            local value = table.remove(self.q)
+            if value then
+                return cb(value)
+            else
+                self.cb = cb
+            end
+        end),
+        put = function(self, value)
+            local cb = self.cb
+            if cb then
+                self.cb = nil
+                return cb(value)
+            else
+                table.insert(self.q, value)
+            end
+        end,
+    }
 end
 
 local function channel()
-  local tx = {
-    send = wrap(function(self, value, send_cb)
-      self.rx.recv = wrap(function(self, recv_cb)
-        self.recv = self.default
-        send_cb()
-        return recv_cb(value)
-      end)
-    end)
-  }
-  local rx = {
-    recv = wrap(function(self, recv_cb)
-      self.tx.send = wrap(function(self, value, send_cb)
-        self.send = self.default
-        recv_cb(value)
-        return send_cb()
-      end)
-    end)
-  }
-  tx.default, rx.default = tx.send, rx.recv
-  tx.rx, rx.tx = rx, tx
-  return tx, rx
+    local tx = {
+        send = wrap(function(self, value, send_cb)
+            self.rx.recv = wrap(function(self, recv_cb)
+                self.recv = self.default
+                send_cb()
+                return recv_cb(value)
+            end)
+        end)
+    }
+    local rx = {
+        recv = wrap(function(self, recv_cb)
+            self.tx.send = wrap(function(self, value, send_cb)
+                self.send = self.default
+                recv_cb(value)
+                return send_cb()
+            end)
+        end)
+    }
+    tx.default, rx.default = tx.send, rx.recv
+    tx.rx, rx.tx = rx, tx
+    return tx, rx
 end
 
 return {
-  sync = async,
-  wait = await,
-  wrap = wrap,
+    sync = async,
+    wait = await,
+    wrap = wrap,
 
-  wait_all = await_all,
-  wait_race = await_race,
-  block = block,
+    wait_all = await_all,
+    wait_race = await_race,
+    block = block,
 
-  queue = queue,
-  channel = channel,
+    queue = queue,
+    channel = channel,
 }
