@@ -1,7 +1,7 @@
 local a = require("src.lib")
 local socket = require("socket")
 
-describe("uv", function()
+describe("socket", function()
     it("echo", function()
         local host = "127.0.0.1"
         local port = 8080
@@ -24,6 +24,7 @@ describe("uv", function()
             callbacks[sock] = function()
                 local byte, err = sock:receive(1)
                 assert(byte, err)
+                callbacks[sock] = nil
                 cb(byte)
             end
         end)
