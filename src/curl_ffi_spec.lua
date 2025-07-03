@@ -1,4 +1,6 @@
 local a = require("src.lib")
+
+package.path = "./deps/?.lua;" .. package.path
 local multi = require("libcurl")
 local loop = require("libuv")
 
