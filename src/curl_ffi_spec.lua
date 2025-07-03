@@ -1,0 +1,50 @@
+local a = require("src.lib")
+local multi = require("libcurl")
+local loop = require("libuv")
+
+describe("libcurl", function()
+    it("multi", function()
+        local q1 = a.queue()
+        local q2 = a.queue()
+
+        multi:add("http://httpbin.org/get",
+            function(str) q1:put(str) end,
+            function(result)
+                assert(result == 0)
+                q1:put(false)
+            end
+        )
+
+        multi:add("http://httpbin.org/get",
+            function(str) q2:put(str) end,
+            function(result)
+                assert(result == 0)
+                q2:put(false)
+            end
+        )
+
+        local collector = a.sync(function(q)
+            local vals, val = {}, nil
+            repeat
+                val = a.wait(q:get())
+                table.insert(vals, val or nil)
+            until not val
+            return table.concat(vals)
+        end)
+
+        local main = a.sync(function()
+            return a.wait_all(collector(q1), collector(q2))
+        end)
+
+        local response1, response2 = nil, nil
+        main()(function(...) response1, response2 = ... end)
+        loop:run()
+
+        local expected = '"url": "http://httpbin.org/get"\n}\n'
+        assert.are.same("string", type(response1))
+        assert.are.same(expected, response1:sub(- #expected))
+
+        assert.are.same("string", type(response2))
+        assert.are.same(expected, response2:sub(- #expected))
+    end)
+end)
