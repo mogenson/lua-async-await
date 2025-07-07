@@ -3,7 +3,8 @@ local uv = require("luv")
 
 describe("uv", function()
     it("pipe", function()
-        local async_read = a.wrap(function(pipe, cb)
+        local write = a.wrap(uv.write)
+        local read = a.wrap(function(pipe, cb)
             pipe:read_start(function(err, data)
                 assert(not err, err)
                 pipe:read_stop()
@@ -11,17 +12,10 @@ describe("uv", function()
             end)
         end)
 
-        local async_write = a.wrap(function(pipe, data, cb)
-            pipe:write(data, function(err)
-                assert(not err, err)
-                cb()
-            end)
-        end)
-
         local reader = a.sync(function(pipe)
             local vals, val = {}, nil
             repeat
-                val = a.wait(async_read(pipe))
+                val = a.wait(read(pipe))
                 -- print("pipe read ", val)
                 table.insert(vals, val or nil)
             until not val
@@ -32,7 +26,7 @@ describe("uv", function()
         local writer = a.sync(function(pipe)
             for char in string.gmatch("Hello, World", ".") do
                 -- print("pipe write ", char)
-                a.wait(async_write(pipe, char))
+                a.wait(write(pipe, char))
             end
             pipe:close()
             return true
@@ -83,5 +77,71 @@ describe("uv", function()
         main()(function(val) result = val end)
         uv.run()
         assert(result >= 1000)
+    end)
+
+    it("socket", function()
+        local host = "127.0.0.1"
+        local port = 8080
+
+        local listen = a.wrap(uv.listen)
+        local connect = a.wrap(uv.tcp_connect)
+        local write = a.wrap(uv.write)
+        local read = a.wrap(function(socket, cb)
+            socket:read_start(function(err, data)
+                assert(not err, err)
+                socket:read_stop()
+                cb(data or false)
+            end)
+        end)
+
+        local server = a.sync(function()
+            local server_socket = uv.new_tcp()
+            server_socket:bind(host, port)
+            a.wait(listen(server_socket, 1))
+            local echo_socket = uv.new_tcp()
+            server_socket:accept(echo_socket)
+
+            while true do
+                local data = a.wait(read(echo_socket))
+                if data then
+                    a.wait(write(echo_socket, data))
+                else
+                    echo_socket:close()
+                    break
+                end
+            end
+            server_socket:close()
+        end)
+
+        local client = a.sync(function()
+            local client_socket = uv.new_tcp()
+            a.wait(connect(client_socket, host, port))
+
+            local number = 1
+            a.wait(write(client_socket, string.char(number)))
+
+            while true do
+                number = assert(string.byte(a.wait(read(client_socket))))
+                if number == 100 then
+                    break
+                else
+                    number = number + 1
+                end
+                a.wait(write(client_socket, string.char(number)))
+            end
+
+            client_socket:close()
+            return number
+        end)
+
+        local main = a.sync(function()
+            return a.wait_race(server(), client())
+        end)
+
+        local result = nil
+        main()(function(...) result = ... end)
+        uv.run()
+
+        assert.are.equal(100, result[2])
     end)
 end)

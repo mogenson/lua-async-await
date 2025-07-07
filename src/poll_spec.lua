@@ -5,7 +5,7 @@ describe("posix", function()
     it("echo", function()
         local callbacks = {}
 
-        local async_read = a.wrap(function(fd, size, cb)
+        local read = a.wrap(function(fd, size, cb)
             callbacks[fd] = function()
                 local val = posix.read(fd, size)
                 callbacks[fd] = nil
@@ -14,7 +14,7 @@ describe("posix", function()
         end)
 
         local reader = a.sync(function(fd)
-            local message = a.wait(async_read(fd, 256))
+            local message = a.wait(read(fd, 256))
             return message
         end)
 

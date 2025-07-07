@@ -20,7 +20,7 @@ describe("socket", function()
 
         local callbacks = {}
 
-        local async_recv = a.wrap(function(sock, cb)
+        local recv = a.wrap(function(sock, cb)
             callbacks[sock] = function()
                 local byte, err = sock:receive(1)
                 assert(byte, err)
@@ -36,7 +36,7 @@ describe("socket", function()
             assert(ok, err)
 
             while true do
-                number = assert(string.byte(a.wait(async_recv(sock))))
+                number = assert(string.byte(a.wait(recv(sock))))
 
                 if number == 100 then
                     break
@@ -53,7 +53,7 @@ describe("socket", function()
 
         local server = a.sync(function(sock)
             while true do
-                local val, err = a.wait(async_recv(sock))
+                local val, err = a.wait(recv(sock))
                 assert(val, err)
                 local ok, err = sock:send(val)
                 assert(ok, err)
