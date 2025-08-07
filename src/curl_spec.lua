@@ -24,7 +24,7 @@ describe("curl", function()
         collector(q)(function(...) response = ... end)
 
         request:perform()
-        q:put(false) -- end collector
+        q:put(nil) -- end collector
         request:close()
 
         local expected = '"url": "http://httpbin.org/get"\n}\n'
@@ -82,7 +82,7 @@ describe("curl", function()
                     local handle, ok, err = multi:info_read()
                     if handle == 0 then break end
                     assert(ok, err)
-                    handle.queue:put(false)
+                    handle.queue:put(nil)
                     handle:close()
                 end
             end

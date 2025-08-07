@@ -1,20 +1,22 @@
 local co = coroutine
+local pack = table.pack or function(...) return { n = select("#", ...), ... } end
+local unpack = table.unpack or unpack
 
 local function async(f)
     return function(...)
-        local params = { ... }
+        local params = table.pack(...)
         local thread = co.create(function()
-            return f(table.unpack(params))
+            return f(table.unpack(params, 1, params.n))
         end)
 
         return function(cb)
             local step = nil
             step = function(...)
-                local result = { co.resume(thread, ...) }
+                local result = table.pack(co.resume(thread, ...))
                 table.remove(result, 1)
 
                 if co.status(thread) == "dead" then
-                    return (cb or function() end)(table.unpack(result))
+                    return (cb or function() end)(table.unpack(result, 1, result.n - 1))
                 else
                     local f = table.unpack(result)
                     assert(type(f) == "function", "type error :: expected func")
@@ -28,10 +30,10 @@ end
 
 local function wrap(f)
     return function(...)
-        local params = { ... }
+        local params = table.pack(...)
         return function(cb)
-            table.insert(params, cb)
-            return f(table.unpack(params))
+            table.insert(params, params.n + 1, cb)
+            return f(table.unpack(params, 1, params.n + 1))
         end
     end
 end
@@ -65,7 +67,7 @@ local function join(thunks)
     end
 end
 
-function race(thunks)
+local function race(thunks)
     local finished = false
     return function(cb)
         if #thunks == 0 then
@@ -115,9 +117,11 @@ local function queue()
     return {
         cb = nil,
         q = {},
+        NIL = {},
         get = wrap(function(self, cb)
             local value = table.remove(self.q)
             if value then
+                if value == self.NIL then value = nil end
                 return cb(value)
             else
                 self.cb = cb
@@ -129,6 +133,7 @@ local function queue()
                 self.cb = nil
                 return cb(value)
             else
+                if value == nil then value = self.NIL end
                 table.insert(self.q, value)
             end
         end,

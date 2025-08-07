@@ -14,7 +14,7 @@ describe("libcurl", function()
             function(str) q1:put(str) end,
             function(result)
                 assert(result == 0)
-                q1:put(false)
+                q1:put(nil)
             end
         )
 
@@ -22,7 +22,7 @@ describe("libcurl", function()
             function(str) q2:put(str) end,
             function(result)
                 assert(result == 0)
-                q2:put(false)
+                q2:put(nil)
             end
         )
 
@@ -30,7 +30,7 @@ describe("libcurl", function()
             local vals, val = {}, nil
             repeat
                 val = a.wait(q:get())
-                table.insert(vals, val or nil)
+                table.insert(vals, val)
             until not val
             return table.concat(vals)
         end)

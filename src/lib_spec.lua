@@ -28,7 +28,7 @@ describe("a", function()
                 -- print("queue put ", i)
                 queue:put(i)
             end
-            queue:put(false)
+            queue:put(nil)
             return true
         end)
 
@@ -37,7 +37,7 @@ describe("a", function()
             repeat
                 val = a.wait(queue:get())
                 -- print("queue get ", val)
-                table.insert(vals, val or nil)
+                table.insert(vals, val)
             until not val
             return vals
         end)
@@ -56,25 +56,27 @@ describe("a", function()
 
         local sender = a.sync(function(tx)
             for i = 1, 10 do
-                -- print("channelA send ", i)
+                -- print("channel send ", i)
                 a.wait(tx:send(i))
             end
-            a.wait(tx:send(false))
+            a.wait(tx:send(nil))
             return true
         end)
 
         local receiver = a.sync(function(rx)
             local vals, val = {}, nil
-            repeat
+            while true do
                 val = a.wait(rx:recv())
-                -- print("channelA recv ", val)
-                table.insert(vals, val or nil)
-            until not val
+                -- print("channel recv ", val)
+                if val == nil then break end
+                table.insert(vals, val)
+            end
             return vals
         end)
 
         local main = a.sync(function()
             return a.wait_all(sender(tx), receiver(rx))
+            -- return a.wait_all(receiver(rx), sender(tx))
         end)
 
         local tx_vals, rx_vals = a.block(main())
@@ -87,7 +89,7 @@ describe("a", function()
 
         local sender = a.sync(function(tx)
             for i = 1, 10 do
-                -- print("channelB send ", i)
+                -- print("channel send ", i)
                 a.wait(tx:send(i))
             end
             a.wait(tx:send(false))
@@ -98,7 +100,7 @@ describe("a", function()
             local vals, val = {}, nil
             repeat
                 val = a.wait(rx:recv())
-                -- print("channelB recv ", val)
+                -- print("channel recv ", val)
                 table.insert(vals, val or nil)
             until not val
             return vals
