@@ -1,26 +1,19 @@
-local co = coroutine
-local pack = table.pack or function(...) return { n = select("#", ...), ... } end
-local unpack = table.unpack or unpack
-
 local function async(f)
     return function(...)
         local params = table.pack(...)
-        local thread = co.create(function()
+        local thread = coroutine.create(function()
             return f(table.unpack(params, 1, params.n))
         end)
 
         return function(cb)
             local step = nil
             step = function(...)
-                local result = table.pack(co.resume(thread, ...))
-                table.remove(result, 1)
+                local result = table.pack(coroutine.resume(thread, ...))
 
-                if co.status(thread) == "dead" then
-                    return (cb or function() end)(table.unpack(result, 1, result.n - 1))
+                if coroutine.status(thread) == "dead" then
+                    return (cb or function() end)(table.unpack(result, 2, result.n))
                 else
-                    local f = table.unpack(result)
-                    assert(type(f) == "function", "type error :: expected func")
-                    return f(step)
+                    return result[2](step)
                 end
             end
             return step()
@@ -96,21 +89,21 @@ local function race(thunks)
 end
 
 local function await(thunk)
-    return co.yield(thunk)
+    return coroutine.yield(thunk)
 end
 
 local function await_all(...)
-    return co.yield(join({ ... }))
+    return coroutine.yield(join({ ... }))
 end
 
 local function await_race(...)
-    return co.yield(race({ ... }))
+    return coroutine.yield(race({ ... }))
 end
 
 local function block(thunk)
-    local results = nil
+    local results = {}
     thunk(function(...) results = table.pack(...) end)
-    return table.unpack(results or {})
+    return table.unpack(results, 1, results.n)
 end
 
 local function queue()
